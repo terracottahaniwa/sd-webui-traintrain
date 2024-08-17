@@ -146,7 +146,7 @@ def train_main(jsononly, mode, modelname, vaename, *args):
     else:
         text_model, unet, vae = trainer.load_checkpoint_model(checkpoint_filename, t, vae = vae)
     
-    unet.to(CUDA, dtype=t.train_model_precision)
+    unet.to(CUDA, dtype=torch.float8_e5m2)
     try:
         unet.enable_xformers_memory_efficient_attention()
         print("Enabling Xformers")
@@ -156,7 +156,10 @@ def train_main(jsononly, mode, modelname, vaename, *args):
     unet.requires_grad_(False)
     unet.eval()
 
-    text_model.to(device = CUDA, dtype = t.train_model_precision)
+    for text_encoder in text_model.text_encoder_list:
+        text_encoder.text_model.embeddings.to(dtype=t.train_model_precision)
+        text_encoder.text_model.encoder.to(dtype=torch.float8_e5m2)
+    text_model.to(CUDA)
 
     if t.use_gradient_checkpointing:
         unet.train()
