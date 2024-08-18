@@ -10,6 +10,7 @@ import traceback
 import torch
 from tqdm import tqdm
 from modules import sd_models, sd_vae, shared, prompt_parser, scripts, lowvram
+from trainer.regularization import apply_max_norm_regularization
 from trainer.lora import LoRANetwork, LycorisNetwork
 from trainer import trainer, dataset
 from diffusers.optimization import get_scheduler
@@ -247,6 +248,7 @@ def train_lora(t):
     flush()
 
     pbar = tqdm(range(t.train_iterations))
+    info = tqdm(bar_format="{desc}")
     while t.train_iterations >= pbar.n:
         for batch in t.dataloader:
             for i in range(t.train_repeat):
@@ -289,6 +291,9 @@ def train_lora(t):
                 lr_scheduler.step()
                 optimizer.zero_grad()
 
+                keys_scaled, mean_norm, maximum_norm = apply_max_norm_regularization(network, 1, CUDA)
+                info.set_description(f"Max Norm Regularization: {keys_scaled=:.4f}, {mean_norm=:.4f}, {maximum_norm=:.4f}, ")
+
                 del noise_pred
 
                 flush()
@@ -326,6 +331,7 @@ def train_leco(t):
     loss_velocity = None
 
     pbar = tqdm(range(t.train_iterations))
+    info = tqdm(bar_format="{desc}")
     while t.train_iterations >= pbar.n:
         with torch.no_grad(), t.a.autocast():                
             timesteps = torch.randint(t.train_min_timesteps, t.train_max_timesteps, (t.train_batch_size,),device=CUDA)
@@ -351,6 +357,9 @@ def train_leco(t):
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
+
+        keys_scaled, mean_norm, maximum_norm = apply_max_norm_regularization(network, 1, CUDA)
+        info.set_description(f"Max Norm Regularization: {keys_scaled=:.4f}, {mean_norm=:.4f}, {maximum_norm=:.4f}, ")
 
         flush()
 
@@ -413,6 +422,7 @@ def make_diff_lora(t, copy):
     loss_ema = None
     loss_velocity = None
 
+    info = tqdm(bar_format="{desc}")
     pbar = tqdm(range(t.train_iterations))
     while t.train_iterations >= pbar.n:
         optimizer.zero_grad()
@@ -439,6 +449,9 @@ def make_diff_lora(t, copy):
         optimizer.step()
         lr_scheduler.step()
         optimizer.zero_grad()
+
+        keys_scaled, mean_norm, maximum_norm = apply_max_norm_regularization(network, 1, CUDA)
+        info.set_description(f"Max Norm Regularization: {keys_scaled=:.4f}, {mean_norm=:.4f}, {maximum_norm=:.4f}, ")
 
         flush()
         
