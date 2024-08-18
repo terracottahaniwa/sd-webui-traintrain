@@ -325,8 +325,6 @@ def train_leco(t):
 
     height, width = t.image_size
 
-    latents = torch.randn((t.train_batch_size, 4, height // 8, width // 8), device=CUDA,dtype = t.train_model_precision)
-
     loss_ema = None
     loss_velocity = None
 
@@ -334,6 +332,7 @@ def train_leco(t):
     info = tqdm(bar_format="{desc}")
     while t.train_iterations >= pbar.n:
         with torch.no_grad(), t.a.autocast():                
+            latents = torch.randn((t.train_batch_size, 4, height // 8, width // 8), device=CUDA,dtype = t.train_model_precision)
             timesteps = torch.randint(t.train_min_timesteps, t.train_max_timesteps, (t.train_batch_size,),device=CUDA)
             timesteps = timesteps.long()
             added_cond_kwargs = get_added_cond_kwargs(t, t.targ_vector, t.train_batch_size)
