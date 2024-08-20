@@ -11,6 +11,7 @@ import torch
 from tqdm import tqdm
 from modules import sd_models, sd_vae, shared, prompt_parser, scripts, lowvram
 from trainer.regularization import apply_max_norm_regularization
+from trainer.leco_latent import DummyLatent
 from trainer.lora import LoRANetwork, LycorisNetwork
 from trainer import trainer, dataset
 from diffusers.optimization import get_scheduler
@@ -324,6 +325,7 @@ def train_leco(t):
         t.targ_vector = torch.cat([t.targ_vector] * t.train_batch_size)
 
     height, width = t.image_size
+    dummy = DummyLatent(height // 8, width // 8)
 
     loss_ema = None
     loss_velocity = None
@@ -331,10 +333,14 @@ def train_leco(t):
     pbar = tqdm(range(t.train_iterations))
     info = tqdm(bar_format="{desc}")
     while t.train_iterations >= pbar.n:
-        with torch.no_grad(), t.a.autocast():                
-            latents = torch.randn((t.train_batch_size, 4, height // 8, width // 8), device=CUDA,dtype = t.train_model_precision)
-            timesteps = torch.randint(t.train_min_timesteps, t.train_max_timesteps, (t.train_batch_size,),device=CUDA)
+        with torch.no_grad(), t.a.autocast():
+            latent_dummy = dummy.get_batch(t.train_batch_size).to(device=CUDA, dtype=t.train_model_precision)
+            normal_noise = torch.randn((t.train_batch_size, 4, height // 8, width // 8), device=CUDA, dtype=t.train_model_precision)
+            timesteps = torch.randint(t.train_min_timesteps, t.train_max_timesteps, (t.train_batch_size,), device=CUDA)
             timesteps = timesteps.long()
+            ratio = timesteps / t.train_max_timesteps
+            ratio = ratio.reshape(t.train_batch_size, 1, 1, 1)
+            latents = latent_dummy * (1 - ratio) + normal_noise * ratio
             added_cond_kwargs = get_added_cond_kwargs(t, t.targ_vector, t.train_batch_size)
             targ_pred = t.unet(latents, timesteps, t.targ_cond, added_cond_kwargs = added_cond_kwargs).sample
         
